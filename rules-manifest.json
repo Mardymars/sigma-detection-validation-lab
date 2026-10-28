@@ -1,0 +1,21 @@
+{
+  "source_repository": "https://github.com/SigmaHQ/sigma",
+  "source_commit": "05d1031f537e830b76da53bae2400c5814c89165",
+  "rules": {
+    "cases/scheduled-task/proc_creation_win_schtasks_creation.yml": {
+      "source_path": "rules/windows/process_creation/proc_creation_win_schtasks_creation.yml",
+      "sha256": "2f8ca8539179e6851171dd23f0d2e5a690e59b30d949aa6e29d04e7b33f82227",
+      "license": "DRL-1.1"
+    },
+    "cases/whoami-priv/proc_creation_win_whoami_priv_discovery.yml": {
+      "source_path": "rules/windows/process_creation/proc_creation_win_whoami_priv_discovery.yml",
+      "sha256": "551440eda804b85d85b68f2b283058ab8286c3c3b1da06c262ca1437fa2558a7",
+      "license": "DRL-1.1"
+    },
+    "cases/whoami-scope/proc_creation_win_whoami_all_execution.yml": {
+      "source_path": "rules/windows/process_creation/proc_creation_win_whoami_all_execution.yml",
+      "sha256": "fd87990871c3324c5e3eb20b4cd6cede336e23cbe3c1a35307b7894581869f24",
+      "license": "DRL-1.1"
+    }
+  }
+}

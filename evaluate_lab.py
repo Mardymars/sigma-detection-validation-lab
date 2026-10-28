@@ -1,0 +1,132 @@
+"""Evaluate pinned Sigma rules against captured Sysmon events, offline.
+
+pySigma converts the actual YAML to SQLite; this program never reimplements the
+detection condition. Results describe these captures, not a production SIEM.
+"""
+import argparse
+import hashlib
+from importlib.metadata import version
+import json
+from pathlib import Path
+import re
+import sqlite3
+
+from sigma.backends.sqlite import sqliteBackend
+from sigma.collection import SigmaCollection
+
+ROOT = Path(__file__).resolve().parent
+CASES = ROOT / 'cases'
+PRIV_RULE = CASES / 'whoami-priv' / 'proc_creation_win_whoami_priv_discovery.yml'
+ALL_RULE = CASES / 'whoami-scope' / 'proc_creation_win_whoami_all_execution.yml'
+TASK_RULE = CASES / 'scheduled-task' / 'proc_creation_win_schtasks_creation.yml'
+SPECS = {
+    'whoami-priv': ([CASES / 'whoami-priv' / 'events.sanitized.json'], [PRIV_RULE]),
+    'whoami-scope': ([CASES / 'whoami-priv' / 'events.sanitized.json', CASES / 'whoami-scope' / 'whoami-all.sanitized.json'], [PRIV_RULE, ALL_RULE]),
+    'scheduled-task': ([CASES / 'scheduled-task' / 'events.sanitized.json'], [TASK_RULE]),
+}
+
+
+def read_json(path):
+    return json.loads(path.read_text(encoding='utf-8-sig'))
+
+
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def evaluate_case(name):
+    input_paths, rule_paths = SPECS[name]
+    case = CASES / name
+    events = []
+    for path in input_paths:
+        data = read_json(path)
+        events.extend(data if isinstance(data, list) else [data])
+    if not events or any(e.get('EventID') != 1 for e in events):
+        raise ValueError('Expected captured Sysmon process-creation events (Event ID 1)')
+    columns = list(events[0])
+    if any(set(e) != set(columns) for e in events):
+        raise ValueError('Captured events must have identical field sets')
+    process_ids = {e['ProcessId'] for e in events}
+    if len(process_ids) != len(events):
+        raise ValueError('Duplicate process IDs within this case; use distinct captures')
+    expected = read_json(case / 'expected.json')
+    if name == 'whoami-priv':
+        expected = {'97a80ec7-0e2f-4d05-9ef4-65760e634f6b': expected}
+    manifest = read_json(ROOT / 'rules-manifest.json')
+    reports = []
+    quoted = ['"' + c.replace('"', '""') + '"' for c in columns]
+    with sqlite3.connect(':memory:') as db:
+        db.row_factory = sqlite3.Row
+        db.create_function('regexp', 2, lambda p, v: v is not None and re.search(p, str(v), re.I) is not None)
+        db.create_function('REV', 1, lambda v: str(v)[::-1] if v is not None else None)
+        schema = ', '.join(f"{q} {'INTEGER' if c == 'EventID' else 'TEXT'}" for c, q in zip(columns, quoted))
+        db.execute(f'CREATE TABLE logs ({schema})')
+        db.executemany(f"INSERT INTO logs VALUES ({', '.join('?' for _ in columns)})", [[e[c] for c in columns] for e in events])
+        for path in rule_paths:
+            relative = path.relative_to(ROOT).as_posix()
+            if digest(path) != manifest['rules'][relative]['sha256']:
+                raise ValueError(f'Rule changed from the documented source copy: {relative}')
+            rules = SigmaCollection.from_yaml(path.read_text(encoding='utf-8'))
+            queries = sqliteBackend().convert(rules)
+            if len(rules.rules) != 1 or len(queries) != 1:
+                raise ValueError('Expected one query per rule')
+            rule = rules.rules[0]
+            rule_id = str(rule.id)
+            if process_ids != set(expected[rule_id]):
+                raise ValueError('Expected results must cover exactly the captured process IDs')
+            matched = {row['ProcessId'] for row in db.execute(queries[0])}
+            results = [
+                {'process_id': e['ProcessId'], 'command_line': e['CommandLine'],
+                 'expected_match': expected[rule_id][e['ProcessId']], 'actual_match': e['ProcessId'] in matched}
+                for e in events
+            ]
+            reports.append({
+                'rule_id': rule_id, 'title': rule.title, 'author': rule.author,
+                'rule_sha256': digest(path),
+                'query': queries[0], 'results': results,
+                'expectations_met': all(r['expected_match'] == r['actual_match'] for r in results),
+            })
+            query_file = 'query.sql' if name == 'whoami-priv' else path.stem + '.sql'
+            (case / query_file).write_text(queries[0] + '\n', encoding='utf-8')
+            print(rule.title)
+            print(f'  Author: {rule.author}')
+            for result in results:
+                print(f"  {'MATCH' if result['actual_match'] else 'NO MATCH'}: {result['command_line']}")
+    if set(expected) != {r['rule_id'] for r in reports}:
+        raise ValueError('Expected rule IDs do not match evaluated rules')
+    checks = sum(len(r['results']) for r in reports)
+    report = {
+        'case': name, 'evaluation': 'Offline SQLite queries generated by pySigma; no processing pipeline',
+        'source_scope': f'{len(events)} user-exported Sysmon Event ID 1 records; raw field names retained',
+        'source_commit': manifest['source_commit'],
+        'input_sha256': {p.relative_to(ROOT).as_posix(): digest(p) for p in input_paths},
+        'expected_sha256': digest(case / 'expected.json'),
+        'packages': {p: version(p) for p in ('pySigma', 'pysigma-backend-sqlite', 'PyYAML')},
+        'sqlite_version': sqlite3.sqlite_version, 'rules': reports,
+        'checks': checks, 'expectations_met': all(r['expectations_met'] for r in reports),
+    }
+    (case / 'results.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+    print(f"{name}: {checks} expectations; all met: {report['expectations_met']}")
+    return report
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--case', choices=['all', *SPECS], default='all')
+    args = parser.parse_args(argv)
+    # The initial two-event whoami test is repeated within the scope comparison;
+    # do not inflate the final result by counting it twice.
+    selected = ['whoami-scope', 'scheduled-task'] if args.case == 'all' else [args.case]
+    reports = [evaluate_case(name) for name in selected]
+    success = all(r['expectations_met'] for r in reports)
+    checks = sum(r['checks'] for r in reports)
+    if args.case == 'all':
+        summary = {'checks': checks, 'expectations_met': success,
+                   'cases': [{'case': r['case'], 'checks': r['checks'], 'expectations_met': r['expectations_met']} for r in reports]}
+        (ROOT / 'results-summary.json').write_text(json.dumps(summary, indent=2) + '\n', encoding='utf-8')
+    print(f'Total: {checks} expectations; all met: {success}')
+    return 0 if success else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

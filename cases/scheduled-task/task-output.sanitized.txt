@@ -1,0 +1,36 @@
+Source: task query and deletion output supplied by the user through chat.
+Sanitization: HostName, Author, and Run As User replaced with lab placeholders.
+The original create command's success line was not supplied. The task query
+independently documents that the task existed; deletion success is shown below.
+No separate post-deletion query or evidence of task execution was supplied.
+
+Folder: \
+HostName:                             DESKTOP-LAB
+TaskName:                             \SigmaLab-DetectionTest-20261028-164228
+Next Run Time:                        N/A
+Status:                               Ready
+Logon Mode:                           Interactive only
+Last Run Time:                        11/30/1999 12:00:00 AM
+Last Result:                          267011
+Author:                               DESKTOP-LAB\LabUser
+Task To Run:                          C:\Windows\System32\cmd.exe /c exit 0
+Start In:                             N/A
+Comment:                              N/A
+Scheduled Task State:                 Enabled
+Idle Time:                            Disabled
+Power Management:                     Stop On Battery Mode, No Start On Batteries
+Run As User:                          LabUser
+Delete Task If Not Rescheduled:       Disabled
+Stop Task If Runs X Hours and X Mins: 72:00:00
+Schedule:                             Scheduling data is not available in this format.
+Schedule Type:                        At logon time
+Start Time:                           N/A
+Start Date:                           N/A
+End Date:                             N/A
+Days:                                 N/A
+Months:                               N/A
+Repeat: Every:                        N/A
+Repeat: Until: Time:                  N/A
+Repeat: Until: Duration:              N/A
+Repeat: Stop If Still Running:        N/A
+SUCCESS: The scheduled task "SigmaLab-DetectionTest-20261028-164228" was successfully deleted.

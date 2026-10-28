@@ -1,0 +1,16 @@
+{
+  "checks": 9,
+  "expectations_met": true,
+  "cases": [
+    {
+      "case": "whoami-scope",
+      "checks": 6,
+      "expectations_met": true
+    },
+    {
+      "case": "scheduled-task",
+      "checks": 3,
+      "expectations_met": true
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+.lab-env/
+.venv/
+__pycache__/
+*.pyc
+.env
+*.evtx
+*.iso
+*.vmdk
+*.vmem
+*.vmss
