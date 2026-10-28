@@ -144,8 +144,7 @@ equivalence across SIEM backends. The scheduled-task exclusion branches and task
 execution were not tested. See the findings for the full practical limits.
 
 No upstream issue, pull request, or rule change is claimed by this project.
-I generated and exported the VM activity. AI assistance was used for test design,
-evaluation tooling, and documentation. The rules and their authorship remain
+I generated and exported the VM activity. The rules and their authorship remain
 attributed to SigmaHQ's contributors.
 
 ## Licensing and attribution
